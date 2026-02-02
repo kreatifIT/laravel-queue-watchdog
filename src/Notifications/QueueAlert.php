@@ -16,7 +16,7 @@ class QueueAlert extends Notification
 
     public function via($notifiable): array
     {
-        return array_keys(config('queue-watchdog.notifications', []));
+        return array_keys(array_filter(config('queue-watchdog.notifications', []), fn($config) => !empty($config)));
     }
 
     public function toMail($notifiable): MailMessage
