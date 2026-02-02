@@ -1,0 +1,57 @@
+{
+    "name": "kreatif/laravel-queue-watchdog",
+    "description": "A Laravel package to monitor queue failures and send notifications based on thresholds and time windows.",
+    "keywords": [
+        "kreatif",
+        "laravel",
+        "queue",
+        "monitoring",
+        "watchdog",
+        "alert"
+    ],
+    "homepage": "https://github.com/kreatifIT/laravel-queue-watchdog",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Kreatif Team",
+            "email": "info@kreatif.it",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "spatie/laravel-package-tools": "^1.16"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Kreatif\QueueWatchdog\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kreatif\QueueWatchdog\Tests\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Kreatif\QueueWatchdog\QueueWatchdogServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
