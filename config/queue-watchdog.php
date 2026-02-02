@@ -59,12 +59,20 @@ return [
     |
     */
     'notifications' => [
+        /*
+        | Note: Ensure your mail driver is correctly configured and reachable.
+        | If using Docker, ensure the mail container (e.g., mailpit) is in the same network.
+        */
         'mail' => [
             'to' => env('QUEUE_WATCHDOG_MAIL_TO', 'admin@example.com'),
         ],
-        // 'slack' => [
-        //     'webhook_url' => env('QUEUE_WATCHDOG_SLACK_WEBHOOK'),
-        // ],
+        /*
+        | Note: Using the 'sync' queue driver will trigger these notifications immediately
+        | during the request/command execution as the "queue" name will be reported as 'sync'.
+        */
+        'slack' => [
+            'webhook_url' => env('QUEUE_WATCHDOG_SLACK_WEBHOOK'),
+        ],
     ],
 
     /*
