@@ -17,6 +17,12 @@ A Laravel package to monitor queue failures and send notifications based on thre
 composer require kreatif/laravel-queue-watchdog
 ```
 
+*Note: If you plan to use the Slack notification channel, you must also install the official Laravel Slack notification package:*
+
+```bash
+composer require laravel/slack-notification-channel
+```
+
 ## Configuration
 
 Publish the config file:
