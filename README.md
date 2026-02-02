@@ -27,6 +27,20 @@ php artisan vendor:publish --tag="laravel-queue-watchdog-config"
 
 The configuration allows you to define thresholds, aggregation strategies, and notification channels.
 
+### Queue Filtering
+
+You can precisely control which queues are monitored using the `queues` array in the config file. It supports wildcards and exclusions:
+
+- `*`: Monitor all queues.
+- `default`: Monitor only the "default" queue.
+- `!ignored`: Exclude the "ignored" queue.
+- `sync*`: Monitor any queue starting with "sync" (e.g., `sync-users`, `sync-orders`).
+
+Example:
+```php
+'queues' => ['*', '!update', 'report', 'sync*'],
+```
+
 ## Usage
 
 The package automatically listens for the `Illuminate\Queue\Events\JobFailed` event and tracks failures in your cache. No additional setup is required beyond configuration.
