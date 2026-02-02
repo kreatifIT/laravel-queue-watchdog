@@ -8,6 +8,11 @@ class AnonymousNotifiable
 {
     use Notifiable;
 
+    public function getKey()
+    {
+        return 'queue-watchdog-anonymous';
+    }
+
     public function routeNotificationForMail()
     {
         return config('queue-watchdog.notifications.mail.to');

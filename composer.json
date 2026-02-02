@@ -31,12 +31,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Kreatif\QueueWatchdog\": "src/"
+            "Kreatif\\QueueWatchdog\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Kreatif\QueueWatchdog\Tests\": "tests/"
+            "Kreatif\\QueueWatchdog\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -48,7 +48,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Kreatif\QueueWatchdog\QueueWatchdogServiceProvider"
+                "Kreatif\\QueueWatchdog\\QueueWatchdogServiceProvider"
             ]
         }
     },
