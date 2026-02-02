@@ -17,19 +17,16 @@ class MonitorJobFailure
         if (! $this->shouldMonitor($event->job->getQueue(), $config['queues'] ?? ['*'])) {
             return;
         }
-
-        $prefix = $config['cache_prefix'] ?? 'queue_watchdog_';
-        
         $key = $this->getCacheKey($event, $config);
         $failures = Cache::get($key, []);
-        
+
         $now = time();
         $failures[] = $now;
 
         // Cleanup old failures outside the window
         $windowSeconds = ($config['thresholds']['default']['window_minutes'] ?? 10) * 60;
         $failures = array_filter($failures, fn($timestamp) => $timestamp > ($now - $windowSeconds));
-        
+
         Cache::put($key, $failures, $windowSeconds);
 
         if (count($failures) >= ($config['thresholds']['default']['failure_limit'] ?? 5)) {
@@ -80,7 +77,7 @@ class MonitorJobFailure
     protected function triggerAlert(JobFailed $event, array $config, string $key): void
     {
         $cooldownKey = $key . ':cooldown';
-        
+
         if (Cache::has($cooldownKey)) {
             return;
         }
@@ -88,10 +85,21 @@ class MonitorJobFailure
         $cooldownMinutes = $config['thresholds']['default']['cooldown_minutes'] ?? 30;
         Cache::put($cooldownKey, true, $cooldownMinutes * 60);
 
-        $notifiable = new \Kreatif\QueueWatchdog\AnonymousNotifiable();
+                $notifiable = new \Kreatif\QueueWatchdog\AnonymousNotifiable();
+
+                
+
+                try {
+
+                    Notification::send($notifiable, new QueueAlert($event, count(Cache::get($key, []))));
+
+                } catch (\Throwable $e) {
+
+                    \Illuminate\Support\Facades\Log::error("Queue Watchdog failed to send notification: " . $e->getMessage());
+
+                }
+
+            }
+
         
-        $channels = array_keys($config['notifications']);
-        
-        Notification::send($notifiable, new QueueAlert($event, count(Cache::get($key, []))));
-    }
 }
