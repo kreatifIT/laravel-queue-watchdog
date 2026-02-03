@@ -7,6 +7,7 @@ use Spatie\LaravelPackageTools\PackageServiceProvider;
 use Kreatif\QueueWatchdog\Listeners\MonitorJobFailure;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Queue\Events\JobFailed;
+use Kreatif\QueueWatchdog\Services\WatchDogService;
 
 class QueueWatchdogServiceProvider extends PackageServiceProvider
 {
@@ -17,8 +18,16 @@ class QueueWatchdogServiceProvider extends PackageServiceProvider
             ->hasConfigFile();
     }
 
+    public function packageRegistered(): void
+    {
+        $this->app->singleton(WatchDogService::class, function ($app) {
+            return new WatchDogService();
+        });
+    }
+
     public function packageBooted(): void
     {
+
         if (config('queue-watchdog.enabled')) {
             Event::listen(JobFailed::class, MonitorJobFailure::class);
         }

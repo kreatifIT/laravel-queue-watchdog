@@ -8,29 +8,27 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Notification;
 use Kreatif\QueueWatchdog\Notifications\QueueAlert;
 use Kreatif\QueueWatchdog\AnonymousNotifiable;
+use Kreatif\QueueWatchdog\Services\WatchDogService;
 
 class AnalyzeWatchdogFailures implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function handle(): void
+    public function handle(WatchDogService $service): void
     {
-        $config = Config::get('queue-watchdog');
-        $prefix = $config['cache_prefix'] ?? 'queue_watchdog_';
-        $bucketKey = $prefix . 'bucket';
-        $activeKey = $prefix . 'collection_active';
-        $cooldownKey = $prefix . 'cooldown';
+        $bucketKey = $service->getBucketCacheKey();
+        $activeKey = $service->getActiveCacheKey();
+        $cooldownKey = $service->getCoolDownCacheKey();
 
         // 1. Retrieve collected failures
         $failures = Cache::get($bucketKey, []);
         $count = count($failures);
 
         // 2. Check Thresholds
-        $limit = $config['thresholds']['default']['failure_limit'] ?? 5;
+        $limit = $service->getConfig('thresholds.default.failure_limit') ?? 5;
 
         if ($count >= $limit) {
             // Trigger Alert
@@ -42,7 +40,7 @@ class AnalyzeWatchdogFailures implements ShouldQueue
             }
 
             // 3. Set Cooldown
-            $cooldownMinutes = $config['thresholds']['default']['cooldown_minutes'] ?? 5;
+            $cooldownMinutes = $service->getConfig('thresholds.default.cooldown_minutes') ?? 5;
             if ($cooldownMinutes > 0) {
                 Cache::put($cooldownKey, true, $cooldownMinutes * 60);
             }

@@ -4,25 +4,25 @@ namespace Kreatif\QueueWatchdog\Listeners;
 
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use Kreatif\QueueWatchdog\Jobs\AnalyzeWatchdogFailures;
-use Illuminate\Support\Str;
+use Kreatif\QueueWatchdog\Services\WatchDogService;
 
 class MonitorJobFailure
 {
+    public function __construct(
+        protected WatchDogService $service
+    ) {}
+
     public function handle(JobFailed $event): void
     {
-        $config = Config::get('queue-watchdog');
-
         // 1. Filter
-        if (! $this->shouldMonitor($event->job->getQueue(), $config['queues'] ?? ['*'])) {
+        if (! $this->service->shouldMonitor($event->job->getQueue())) {
             return;
         }
 
-        $prefix = $config['cache_prefix'] ?? 'queue_watchdog_';
-        $activeKey = $prefix . 'collection_active';
-        $bucketKey = $prefix . 'bucket';
-        $cooldownKey = $prefix . 'cooldown';
+        $activeKey = $this->service->getActiveCacheKey();
+        $bucketKey = $this->service->getBucketCacheKey();
+        $cooldownKey = $this->service->getCoolDownCacheKey();
 
         // 2. Check Cooldown (Only if we are NOT already collecting)
         // If we are collecting, we keep adding to the bucket regardless of cooldown.
@@ -33,7 +33,7 @@ class MonitorJobFailure
             }
 
             // Start New Collection Window
-            $windowMinutes = $config['thresholds']['default']['window_minutes'] ?? 5;
+            $windowMinutes = $this->service->getConfig('thresholds.default.window_minutes') ?? 5;
             
             // Mark collection as active for the window duration
             Cache::put($activeKey, true, $windowMinutes * 60);
@@ -54,26 +54,8 @@ class MonitorJobFailure
         ];
 
         // Store with a TTL slightly longer than the window to ensure the Job finds it
-        $ttl = ($config['thresholds']['default']['window_minutes'] ?? 5) * 60 + 60; 
+        $windowMinutes = $this->service->getConfig('thresholds.default.window_minutes') ?? 5;
+        $ttl = $windowMinutes * 60 + 60; 
         Cache::put($bucketKey, $failures, $ttl);
-    }
-
-    protected function shouldMonitor(string $queue, array $filters): bool
-    {
-        $excluded = array_filter($filters, fn($f) => str_starts_with($f, '!'));
-        $included = array_filter($filters, fn($f) => ! str_starts_with($f, '!'));
-
-        foreach ($excluded as $filter) {
-            $pattern = ltrim($filter, '!');
-            if (Str::is($pattern, $queue)) return false;
-        }
-
-        if (empty($included)) return true;
-
-        foreach ($included as $pattern) {
-            if (Str::is($pattern, $queue)) return true;
-        }
-
-        return false;
     }
 }

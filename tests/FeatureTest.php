@@ -28,7 +28,7 @@ class FeatureTest extends TestCase
         Config::set('queue-watchdog.thresholds.default.window_minutes', 5);
 
         $event = new JobFailed('test', $this->mockJob('default'), new Exception('Error'));
-        $listener = new MonitorJobFailure();
+        $listener = app(MonitorJobFailure::class);
 
         $listener->handle($event);
 
@@ -48,7 +48,7 @@ class FeatureTest extends TestCase
         Cache::put('queue_watchdog_bucket', [['job' => 'OldJob']]);
 
         $event = new JobFailed('test', $this->mockJob('default'), new Exception('Error'));
-        $listener = new MonitorJobFailure();
+        $listener = app(MonitorJobFailure::class);
 
         $listener->handle($event);
 
@@ -70,7 +70,7 @@ class FeatureTest extends TestCase
         ]);
 
         $job = new AnalyzeWatchdogFailures();
-        $job->handle();
+        $job->handle(app(\Kreatif\QueueWatchdog\Services\WatchDogService::class));
 
         Notification::assertSentTo(new \Kreatif\QueueWatchdog\AnonymousNotifiable(), QueueAlert::class, function ($notification) {
             return $notification->count === 2;
@@ -85,7 +85,7 @@ class FeatureTest extends TestCase
         Cache::put('queue_watchdog_bucket', [['job' => 'Job1']]);
 
         $job = new AnalyzeWatchdogFailures();
-        $job->handle();
+        $job->handle(app(\Kreatif\QueueWatchdog\Services\WatchDogService::class));
 
         $this->assertTrue(Cache::has('queue_watchdog_cooldown'));
     }
