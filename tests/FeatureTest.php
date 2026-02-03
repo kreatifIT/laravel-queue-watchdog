@@ -90,6 +90,23 @@ class FeatureTest extends TestCase
         $this->assertTrue(Cache::has('queue_watchdog_cooldown'));
     }
 
+    public function test_it_ignores_analysis_job_failure()
+    {
+        $job = Mockery::mock(\Illuminate\Contracts\Queue\Job::class);
+        $job->allows()->getQueue()->andReturn('default');
+        $job->allows()->resolveName()->andReturn(AnalyzeWatchdogFailures::class);
+
+        $event = new JobFailed('test', $job, new Exception('Error'));
+        $listener = app(MonitorJobFailure::class);
+
+        $listener->handle($event);
+
+        // Should NOT dispatch analysis job
+        Bus::assertNotDispatched(AnalyzeWatchdogFailures::class);
+        // Should NOT be in cache
+        $this->assertFalse(Cache::has('queue_watchdog_bucket'));
+    }
+
     protected function mockJob($queue)
     {
         $job = Mockery::mock(\Illuminate\Contracts\Queue\Job::class);

@@ -15,8 +15,8 @@ class MonitorJobFailure
 
     public function handle(JobFailed $event): void
     {
-        // 1. Filter
-        if (! $this->service->shouldMonitor($event->job->getQueue())) {
+
+        if (! $this->service->shouldMonitor($event->job->getQueue(), $event->job->resolveName())) {
             return;
         }
 
@@ -24,27 +24,25 @@ class MonitorJobFailure
         $bucketKey = $this->service->getBucketCacheKey();
         $cooldownKey = $this->service->getCoolDownCacheKey();
 
-        // 2. Check Cooldown (Only if we are NOT already collecting)
-        // If we are collecting, we keep adding to the bucket regardless of cooldown.
-        // If we are NOT collecting, we check if we should start.
+
         if (! Cache::has($activeKey)) {
             if (Cache::has($cooldownKey)) {
                 return; // Ignore failures during cooldown
             }
 
-            // Start New Collection Window
-            $windowMinutes = $this->service->getConfig('thresholds.default.window_minutes') ?? 5;
-            
-            // Mark collection as active for the window duration
-            Cache::put($activeKey, true, $windowMinutes * 60);
+            $windowConfig = $this->service->getConfig('thresholds.default.window_minutes');
+            // If null, default to 5. If false/0, treat as 0 (immediate).
+            $windowMinutes = $windowConfig === null ? 5 : (int) $windowConfig;
 
-            // Schedule the analysis job at the end of the window
+            // If 0, use a small buffer (e.g. 1 sec) to allow current process to finish
+            $ttl = $windowMinutes > 0 ? $windowMinutes * 60 : 1;
+            Cache::put($activeKey, true, $ttl);
+
             // Note: In 'sync' driver, this runs immediately.
             AnalyzeWatchdogFailures::dispatch()
                 ->delay(now()->addMinutes($windowMinutes));
         }
 
-        // 3. Add Failure to Bucket
         $failures = Cache::get($bucketKey, []);
         $failures[] = [
             'job' => $event->job->resolveName(),
@@ -54,8 +52,10 @@ class MonitorJobFailure
         ];
 
         // Store with a TTL slightly longer than the window to ensure the Job finds it
-        $windowMinutes = $this->service->getConfig('thresholds.default.window_minutes') ?? 5;
-        $ttl = $windowMinutes * 60 + 60; 
+        $windowConfig = $this->service->getConfig('thresholds.default.window_minutes');
+        $windowMinutes = $windowConfig === null ? 5 : (int) $windowConfig;
+        
+        $ttl = $windowMinutes * 60 + 60;
         Cache::put($bucketKey, $failures, $ttl);
     }
 }

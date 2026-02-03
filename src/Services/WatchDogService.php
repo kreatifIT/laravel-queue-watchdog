@@ -33,8 +33,13 @@ class WatchDogService
         return $prefix . 'collection_active';
     }
 
-    public function shouldMonitor(string $queue): bool
+    public function shouldMonitor(string $queue, ?string $jobName = null): bool
     {
+        // Ignore our own internal analysis job to prevent infinite loops
+        if ($jobName === \Kreatif\QueueWatchdog\Jobs\AnalyzeWatchdogFailures::class) {
+            return false;
+        }
+
         $filters = $this->getConfig('queues') ?? ['*'];
 
         $excluded = array_filter($filters, fn($f) => str_starts_with($f, '!'));
