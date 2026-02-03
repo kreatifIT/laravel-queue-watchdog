@@ -5,25 +5,29 @@ return [
     |--------------------------------------------------------------------------
     | Watchdog Enabled
     |--------------------------------------------------------------------------
-    |
-    | Set this to false to disable the queue failure monitoring.
-    |
     */
     'enabled' => env('QUEUE_WATCHDOG_ENABLED', true),
 
     /*
     |--------------------------------------------------------------------------
-    | Notification Thresholds
+    | Notification Thresholds (Digest Mode)
     |--------------------------------------------------------------------------
     |
-    | Define the rules for triggering an alert.
+    | The watchdog uses a "Time Bucket" model:
+    | 1. First failure starts a collection window of 'window_minutes'.
+    | 2. All failures during this window are collected.
+    | 3. At the end of the window, if failures >= limit, a summary is sent.
+    | 4. Then a 'cooldown_minutes' period starts where no new windows can begin.
+    |
+    | Note: If using the 'sync' driver, the "End of Window" job runs IMMEDIATELY
+    | after the first failure, effectively reporting instantly.
     |
     */
     'thresholds' => [
         'default' => [
-            'window_minutes' => 10,
-            'failure_limit' => 5,
-            'cooldown_minutes' => 30, // How long to wait before sending the same notification again
+            'window_minutes' => 5,    // Duration to collect failures before reporting
+            'failure_limit' => 5,     // Minimum failures to trigger a report
+            'cooldown_minutes' => 30, // Time to wait AFTER a report before monitoring again
         ],
     ],
 
@@ -31,32 +35,14 @@ return [
     |--------------------------------------------------------------------------
     | Monitored Queues
     |--------------------------------------------------------------------------
-    |
-    | Specify which queues should be monitored. 
     | '*' for all, '!queue_name' to exclude, 'wildcard*' for patterns.
-    |
     */
     'queues' => ['*'],
 
     /*
     |--------------------------------------------------------------------------
-    | Aggregation Strategy
-    |--------------------------------------------------------------------------
-    |
-    | 'all' - Counts every failed job.
-    | 'unique_jobs' - Counts failures per job class.
-    | 'unique_exceptions' - Counts failures per exception type.
-    |
-    */
-    'aggregation' => 'all',
-
-    /*
-    |--------------------------------------------------------------------------
     | Notification Channels
     |--------------------------------------------------------------------------
-    |
-    | Specify the channels and the recipients for the alerts.
-    |
     */
     'notifications' => [
         /*
@@ -70,19 +56,10 @@ return [
         | Note: Using the 'sync' queue driver will trigger these notifications immediately
         | during the request/command execution as the "queue" name will be reported as 'sync'.
         */
-        'slack' => [
-            'webhook_url' => env('QUEUE_WATCHDOG_SLACK_WEBHOOK'),
-        ],
+        // 'slack' => [
+        //     'webhook_url' => env('QUEUE_WATCHDOG_SLACK_WEBHOOK'),
+        // ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cache Configuration
-    |--------------------------------------------------------------------------
-    |
-    | The watchdog uses the cache to store failure counts and timestamps.
-    |
-    */
     'cache_prefix' => 'queue_watchdog_',
-    'cache_driver' => env('QUEUE_WATCHDOG_CACHE_DRIVER', null),
 ];

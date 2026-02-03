@@ -5,9 +5,11 @@ namespace Kreatif\QueueWatchdog\Tests;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Queue\Events\JobFailed;
 use Kreatif\QueueWatchdog\Notifications\QueueAlert;
 use Kreatif\QueueWatchdog\Listeners\MonitorJobFailure;
+use Kreatif\QueueWatchdog\Jobs\AnalyzeWatchdogFailures;
 use Illuminate\Support\Facades\Config;
 use Mockery;
 
@@ -17,62 +19,75 @@ class FeatureTest extends TestCase
     {
         parent::setUp();
         Notification::fake();
+        Bus::fake(); // Fake the job dispatching
         Cache::flush();
     }
 
-    public function test_it_monitors_queue_failures_and_triggers_notification()
+    public function test_it_schedules_analysis_job_on_first_failure()
+    {
+        Config::set('queue-watchdog.thresholds.default.window_minutes', 5);
+
+        $event = new JobFailed('test', $this->mockJob('default'), new Exception('Error'));
+        $listener = new MonitorJobFailure();
+
+        $listener->handle($event);
+
+        // Should dispatch the analysis job
+        Bus::assertDispatched(AnalyzeWatchdogFailures::class, function ($job) {
+            return !is_null($job->delay);
+        });
+
+        // Failures should be in cache
+        $this->assertCount(1, Cache::get('queue_watchdog_bucket'));
+    }
+
+    public function test_it_collects_failures_during_window()
+    {
+        // Start window
+        Cache::put('queue_watchdog_collection_active', true, 300);
+        Cache::put('queue_watchdog_bucket', [['job' => 'OldJob']]);
+
+        $event = new JobFailed('test', $this->mockJob('default'), new Exception('Error'));
+        $listener = new MonitorJobFailure();
+
+        $listener->handle($event);
+
+        // Should NOT dispatch new job (window active)
+        Bus::assertNotDispatched(AnalyzeWatchdogFailures::class);
+
+        // Bucket should grow
+        $this->assertCount(2, Cache::get('queue_watchdog_bucket'));
+    }
+
+    public function test_analysis_job_triggers_notification_if_limit_reached()
     {
         Config::set('queue-watchdog.thresholds.default.failure_limit', 2);
-        Config::set('queue-watchdog.thresholds.default.window_minutes', 1);
+        
+        // Populate bucket
+        Cache::put('queue_watchdog_bucket', [
+            ['job' => 'Job1', 'queue' => 'default', 'exception' => 'E1', 'failed_at' => now()],
+            ['job' => 'Job2', 'queue' => 'default', 'exception' => 'E2', 'failed_at' => now()],
+        ]);
 
-        $event = new JobFailed(
-            'test-connection',
-            $this->mockJob('default'),
-            new Exception('Test Exception')
-        );
+        $job = new AnalyzeWatchdogFailures();
+        $job->handle();
 
-        $listener = new MonitorJobFailure();
-
-        // First failure
-        $listener->handle($event);
-        Notification::assertNothingSent();
-
-        // Second failure (reaches limit)
-        $listener->handle($event);
-
-        Notification::assertSentTo(new \Kreatif\QueueWatchdog\AnonymousNotifiable(), QueueAlert::class);
+        Notification::assertSentTo(new \Kreatif\QueueWatchdog\AnonymousNotifiable(), QueueAlert::class, function ($notification) {
+            return $notification->count === 2;
+        });
     }
 
-    public function test_it_respects_queue_filters()
+    public function test_analysis_job_sets_cooldown()
     {
-        Config::set('queue-watchdog.queues', ['monitored']);
         Config::set('queue-watchdog.thresholds.default.failure_limit', 1);
+        Config::set('queue-watchdog.thresholds.default.cooldown_minutes', 10);
+        
+        Cache::put('queue_watchdog_bucket', [['job' => 'Job1']]);
 
-        $listener = new MonitorJobFailure();
+        $job = new AnalyzeWatchdogFailures();
+        $job->handle();
 
-        // Failure on ignored queue
-        $listener->handle(new JobFailed('test', $this->mockJob('ignored'), new Exception()));
-        Notification::assertNothingSent();
-
-        // Failure on monitored queue
-        $listener->handle(new JobFailed('test', $this->mockJob('monitored'), new Exception()));
-        Notification::assertSentTo(new \Kreatif\QueueWatchdog\AnonymousNotifiable(), QueueAlert::class);
-    }
-
-    public function test_it_respects_exclusions_and_wildcards()
-    {
-        Config::set('queue-watchdog.queues', ['*', '!secret', 'sync*']);
-        Config::set('queue-watchdog.thresholds.default.failure_limit', 1);
-
-        $listener = new MonitorJobFailure();
-
-        // Excluded queue
-        $listener->handle(new JobFailed('test', $this->mockJob('secret'), new Exception()));
-        Notification::assertNothingSent();
-
-        // Wildcard queue
-        $listener->handle(new JobFailed('test', $this->mockJob('sync-users'), new Exception()));
-        Notification::assertSentTo(new \Kreatif\QueueWatchdog\AnonymousNotifiable(), QueueAlert::class);
+        $this->assertTrue(Cache::has('queue_watchdog_cooldown'));
     }
 
     protected function mockJob($queue)

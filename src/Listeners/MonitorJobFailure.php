@@ -4,9 +4,9 @@ namespace Kreatif\QueueWatchdog\Listeners;
 
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Notification;
-use Kreatif\QueueWatchdog\Notifications\QueueAlert;
 use Illuminate\Support\Facades\Config;
+use Kreatif\QueueWatchdog\Jobs\AnalyzeWatchdogFailures;
+use Illuminate\Support\Str;
 
 class MonitorJobFailure
 {
@@ -14,36 +14,48 @@ class MonitorJobFailure
     {
         $config = Config::get('queue-watchdog');
 
+        // 1. Filter
         if (! $this->shouldMonitor($event->job->getQueue(), $config['queues'] ?? ['*'])) {
             return;
         }
-        $key = $this->getCacheKey($event, $config);
-        $failures = Cache::get($key, []);
 
-        $now = time();
-        $failures[] = $now;
-
-        // Cleanup old failures outside the window
-        $windowSeconds = ($config['thresholds']['default']['window_minutes'] ?? 10) * 60;
-        $failures = array_filter($failures, fn($timestamp) => $timestamp > ($now - $windowSeconds));
-
-        Cache::put($key, $failures, $windowSeconds);
-
-        if (count($failures) >= ($config['thresholds']['default']['failure_limit'] ?? 5)) {
-            $this->triggerAlert($event, $config, $key);
-        }
-    }
-
-    protected function getCacheKey(JobFailed $event, array $config): string
-    {
         $prefix = $config['cache_prefix'] ?? 'queue_watchdog_';
-        $strategy = $config['aggregation'] ?? 'all';
+        $activeKey = $prefix . 'collection_active';
+        $bucketKey = $prefix . 'bucket';
+        $cooldownKey = $prefix . 'cooldown';
 
-        return match ($strategy) {
-            'unique_jobs' => $prefix . 'failures:' . md5($event->job->resolveName()),
-            'unique_exceptions' => $prefix . 'failures:' . md5(get_class($event->exception)),
-            default => $prefix . 'failures:all',
-        };
+        // 2. Check Cooldown (Only if we are NOT already collecting)
+        // If we are collecting, we keep adding to the bucket regardless of cooldown.
+        // If we are NOT collecting, we check if we should start.
+        if (! Cache::has($activeKey)) {
+            if (Cache::has($cooldownKey)) {
+                return; // Ignore failures during cooldown
+            }
+
+            // Start New Collection Window
+            $windowMinutes = $config['thresholds']['default']['window_minutes'] ?? 5;
+            
+            // Mark collection as active for the window duration
+            Cache::put($activeKey, true, $windowMinutes * 60);
+
+            // Schedule the analysis job at the end of the window
+            // Note: In 'sync' driver, this runs immediately.
+            AnalyzeWatchdogFailures::dispatch()
+                ->delay(now()->addMinutes($windowMinutes));
+        }
+
+        // 3. Add Failure to Bucket
+        $failures = Cache::get($bucketKey, []);
+        $failures[] = [
+            'job' => $event->job->resolveName(),
+            'queue' => $event->job->getQueue(),
+            'exception' => $event->exception->getMessage(),
+            'failed_at' => now()->toDateTimeString(),
+        ];
+
+        // Store with a TTL slightly longer than the window to ensure the Job finds it
+        $ttl = ($config['thresholds']['default']['window_minutes'] ?? 5) * 60 + 60; 
+        Cache::put($bucketKey, $failures, $ttl);
     }
 
     protected function shouldMonitor(string $queue, array $filters): bool
@@ -51,55 +63,17 @@ class MonitorJobFailure
         $excluded = array_filter($filters, fn($f) => str_starts_with($f, '!'));
         $included = array_filter($filters, fn($f) => ! str_starts_with($f, '!'));
 
-        // Check exclusions first
         foreach ($excluded as $filter) {
             $pattern = ltrim($filter, '!');
-            if (\Illuminate\Support\Str::is($pattern, $queue)) {
-                return false;
-            }
+            if (Str::is($pattern, $queue)) return false;
         }
 
-        // If no inclusions are specified (and not excluded), monitor everything
-        if (empty($included)) {
-            return true;
-        }
+        if (empty($included)) return true;
 
-        // Check inclusions
         foreach ($included as $pattern) {
-            if (\Illuminate\Support\Str::is($pattern, $queue)) {
-                return true;
-            }
+            if (Str::is($pattern, $queue)) return true;
         }
 
         return false;
     }
-
-    protected function triggerAlert(JobFailed $event, array $config, string $key): void
-    {
-        $cooldownKey = $key . ':cooldown';
-
-        if (Cache::has($cooldownKey)) {
-            return;
-        }
-
-        $cooldownMinutes = $config['thresholds']['default']['cooldown_minutes'] ?? 30;
-        Cache::put($cooldownKey, true, $cooldownMinutes * 60);
-
-                $notifiable = new \Kreatif\QueueWatchdog\AnonymousNotifiable();
-
-                
-
-                try {
-
-                    Notification::send($notifiable, new QueueAlert($event, count(Cache::get($key, []))));
-
-                } catch (\Throwable $e) {
-
-                    \Illuminate\Support\Facades\Log::error("Queue Watchdog failed to send notification: " . $e->getMessage());
-
-                }
-
-            }
-
-        
 }

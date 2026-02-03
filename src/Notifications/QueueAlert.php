@@ -5,13 +5,12 @@ namespace Kreatif\QueueWatchdog\Notifications;
 use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Messages\SlackMessage;
-use Illuminate\Queue\Events\JobFailed;
 
 class QueueAlert extends Notification
 {
     public function __construct(
-        public JobFailed $event,
-        public int $failureCount
+        public array $failures, // Array of failure data
+        public int $count
     ) {}
 
     public function via($notifiable): array
@@ -21,30 +20,35 @@ class QueueAlert extends Notification
 
     public function toMail($notifiable): MailMessage
     {
+        $lastFailure = end($this->failures);
+        
         return (new MailMessage)
             ->error()
-            ->subject('Queue Watchdog Alert: High Failure Rate Detected')
-            ->line("The queue watchdog has detected {$this->failureCount} failures within the configured time window.")
-            ->line("Queue: " . $this->event->job->getQueue())
-            ->line("Last failed job: " . $this->event->job->resolveName())
-            ->line("Exception: " . $this->event->exception->getMessage())
-            ->action('View Failed Jobs', url('/admin/failed-jobs')) // Adjust if needed
-            ->line('Please check your queue workers and job logic.');
+            ->subject("Queue Watchdog Alert: {$this->count} Failures Detected")
+            ->line("The queue watchdog has detected {$this->count} failures in the last collection window.")
+            ->line("Last Failed Job: " . ($lastFailure['job'] ?? 'Unknown'))
+            ->line("Queue: " . ($lastFailure['queue'] ?? 'Unknown'))
+            ->line("Exception: " . Str::limit($lastFailure['exception'] ?? 'Unknown', 200))
+            ->line("See your dashboard for full details.");
     }
 
     public function toSlack($notifiable): SlackMessage
     {
+        $lastFailure = end($this->failures);
+
         return (new SlackMessage)
             ->error()
-            ->content('Queue Watchdog Alert!')
-            ->attachment(function ($attachment) {
-                $attachment->title('High Failure Rate Detected')
+            ->content("Queue Watchdog Alert: {$this->count} failures detected in the collection window.")
+            ->attachment(function ($attachment) use ($lastFailure) {
+                $attachment->title('Last Failure Details')
                     ->fields([
-                        'Failures' => $this->failureCount,
-                        'Queue' => $this->event->job->getQueue(),
-                        'Job' => $this->event->job->resolveName(),
-                        'Exception' => $this->event->exception->getMessage(),
+                        'Job' => $lastFailure['job'] ?? 'Unknown',
+                        'Queue' => $lastFailure['queue'] ?? 'Unknown',
+                        'Exception' => Str::limit($lastFailure['exception'] ?? 'Unknown', 200),
+                        'Time' => $lastFailure['failed_at'] ?? now()->toDateTimeString(),
                     ]);
             });
     }
 }
+
+use Illuminate\Support\Str;
