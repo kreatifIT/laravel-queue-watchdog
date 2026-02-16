@@ -27,10 +27,12 @@ class QueueAlert extends Notification
             ->error()
             ->subject("Queue Watchdog Alert: {$this->count} Failures Detected")
             ->line("The queue watchdog has detected {$this->count} failures in the last collection window.")
+            ->line("App: " . (config('app.name'))." (".app()->environment().")")
+            ->line("Host: " . (config('app.url')) )
             ->line("Last Failed Job: " . ($lastFailure['job'] ?? 'Unknown'))
             ->line("Queue: " . ($lastFailure['queue'] ?? 'Unknown'))
             ->line("Exception: " . Str::limit($lastFailure['exception'] ?? 'Unknown', 200))
-            ->line("See your dashboard for full details.");
+            ->line("Check the logs for more details");
     }
 
     public function toSlack($notifiable): SlackMessage
@@ -43,6 +45,8 @@ class QueueAlert extends Notification
             ->attachment(function ($attachment) use ($lastFailure) {
                 $attachment->title('Last Failure Details')
                     ->fields([
+                        'App' => (config('app.name'))." (".app()->environment().")",
+                        'Host' => (config('app.url')),
                         'Job' => $lastFailure['job'] ?? 'Unknown',
                         'Queue' => $lastFailure['queue'] ?? 'Unknown',
                         'Exception' => Str::limit($lastFailure['exception'] ?? 'Unknown', 200),
