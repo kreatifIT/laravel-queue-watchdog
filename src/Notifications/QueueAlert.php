@@ -5,6 +5,7 @@ namespace Kreatif\QueueWatchdog\Notifications;
 use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Messages\SlackMessage;
+use Illuminate\Support\Str;
 
 class QueueAlert extends Notification
 {
@@ -21,7 +22,7 @@ class QueueAlert extends Notification
     public function toMail($notifiable): MailMessage
     {
         $lastFailure = end($this->failures);
-        
+
         return (new MailMessage)
             ->error()
             ->subject("Queue Watchdog Alert: {$this->count} Failures Detected")
@@ -50,5 +51,3 @@ class QueueAlert extends Notification
             });
     }
 }
-
-use Illuminate\Support\Str;
