@@ -26,8 +26,8 @@ return [
     'thresholds' => [
         'default' => [
             'window_minutes' => 5,    // Duration to collect failures before reporting
-            'failure_limit' => 5,     // Minimum failures to trigger a report
-            'cooldown_minutes' => 30, // Time to wait AFTER a report before monitoring again
+            'failure_limit' => 1,     // Minimum failures to trigger a report
+            'cooldown_minutes' => 0, // Time to wait AFTER a report before monitoring again
         ],
     ],
 
