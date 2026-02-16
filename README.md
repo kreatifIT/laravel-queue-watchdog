@@ -32,6 +32,11 @@ Publish the config file:
 ```bash
 php artisan vendor:publish --tag="laravel-queue-watchdog-config"
 ```
+or 
+
+```bash
+php artisan vendor:publish --tag="queue-watchdog-config"
+```
 
 The configuration allows you to define thresholds, aggregation strategies, and notification channels.
 
