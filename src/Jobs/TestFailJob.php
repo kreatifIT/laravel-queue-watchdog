@@ -12,7 +12,7 @@ use Exception;
 class TestFailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-    
+
     public function handle(): void
     {
         throw new Exception("Queue Watchdog Test: This is a deliberate failure to verify that the monitoring system and notifications are working correctly.");
