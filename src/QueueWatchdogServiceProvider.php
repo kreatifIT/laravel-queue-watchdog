@@ -15,7 +15,8 @@ class QueueWatchdogServiceProvider extends PackageServiceProvider
     {
         $package
             ->name('laravel-queue-watchdog')
-            ->hasConfigFile();
+            ->hasConfigFile()
+            ->hasCommand(\Kreatif\QueueWatchdog\Console\TestWatchdogCommand::class);
     }
 
     public function packageRegistered(): void
